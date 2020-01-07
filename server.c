@@ -14,10 +14,8 @@
 #include <arpa/inet.h>
 #include <sys/epoll.h>
 
-
 #define MAX 1024
 #define HOME_PATH "index.html"
-
 
 static int epoll_fd = 0;
 
@@ -103,8 +101,35 @@ void ProcessCreate(int sock)
   epoll_add(conn_sock);
   printf("连接成功：[id]: %d  [ip]:%s\n",conn_sock,inet_ntoa(addr.sin_addr)); 
 }
+//404NOT-Find
+void echo_404(int sock)
+{
 
-      
+  clear_header(sock);
+  char line[MAX];
+  char body[MAX];
+  sprintf(body,"<!DOCTYPE HTML><head>");
+  sprintf(body,"%s<title>404</title>",body);
+sprintf(body,"%s<meta charset='utf-8' />",body);
+sprintf(body,"%s<style>",body);
+sprintf(body,"%s body { background-image: url('body.jpg'); } ",body);
+sprintf(body,"%s</style> </head><body><center>",body);
+sprintf(body,"%s<h1> 404！</h1>",body);
+sprintf(body,"%s<h1> 您所访问的页面不存在。</h1>",body);
+sprintf(body,"%s</center></body></html>",body);
+  int size = (int)strlen(body);
+  sprintf(line, "HTTP/1.1 200 OK\r\n");
+  send(sock, line, strlen(line), 0);
+  sprintf(line, "Content-Length: %d\r\n", size);
+  send(sock, line, strlen(line), 0);
+  sprintf(line, "\r\n");
+  send(sock, line, strlen(line), 0);
+  send(sock, body, strlen(body), 0);
+
+}
+
+
+
 //连接服务器
 void ProcessConnect(int sock)
 {
@@ -113,8 +138,8 @@ void ProcessConnect(int sock)
   char url[MAX] = {0};
   char path[MAX] = {0};
   int errCode = 200;
-  unsigned i = 0;
-  unsigned j = 0;
+  int  i = 0;
+  int j = 0;
   get_line(sock, first_line, sizeof(first_line));
   while(i < sizeof(method) -1 && j < sizeof(first_line) && !isspace(first_line[j]))
   {
@@ -136,15 +161,27 @@ void ProcessConnect(int sock)
     strcat(path, HOME_PATH);
   }
   struct stat st;
-  stat(path, &st);
+  if(stat(path, &st) < 0)
+  {
+    echo_404(sock);
+    close(sock);
+    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, sock, NULL);
+    return ;
+  }
   if(S_ISDIR(st.st_mode))
   {
     strcat(path, HOME_PATH);
   }
-  echo_www(sock, path, st.st_size, &errCode);
+  if( errCode != 200 )
+  {
+    echo_404(sock);
+  }
+  else
+  {
+	echo_www(sock, path, st.st_size, &errCode);
+  }
   close(sock);
   epoll_ctl(epoll_fd, EPOLL_CTL_DEL, sock, NULL);
-
 }
 
 
@@ -183,7 +220,7 @@ int main(int argc, char* argv[])
   argv[1]="127.0.0.1";
   argv[2]="8080";
   int lis_sock = SocketInit(argv[1],atoi(argv[2]) );
-  printf("正在连接服务器\n\n");
+  printf("正在连接......\n\n");
   epoll_add(lis_sock);
   struct epoll_event event[10];
   while(1)
